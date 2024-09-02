@@ -36,6 +36,26 @@ async function initializeOptions(setKey, process, options) {
 	return options;
 }
 
+async function fetchAndProcessItems(getFn, process, start, stop, options, iteration) {
+	/* eslint-disable no-await-in-loop */
+	const ids = await getFn(
+		options.setKey,
+		start,
+		options.isByScore ? stop - start + 1 : stop,
+		options.reverse ? options.max : options.min,
+		options.reverse ? options.min : options.max,
+	);
+
+	if (!ids.length || options.doneIf(start, stop, ids)) {
+		return false;
+	}
+	if (iteration > 1 && options.interval) {
+		await sleep(options.interval);
+	}
+	await process(ids);
+	return true;
+}
+
 async function processItems(setKey, process, options) {
 	let start = 0;
 	let stop = options.batch - 1;
@@ -50,23 +70,10 @@ async function processItems(setKey, process, options) {
 	const withScores = options.withScores ? 'WithScores' : '';
 	let iteration = 1;
 	const getFn = db[`${method}${byScore}${withScores}`];
-	while (true) {
-		/* eslint-disable no-await-in-loop */
-		const ids = await getFn(
-			setKey,
-			start,
-			isByScore ? stop - start + 1 : stop,
-			options.reverse ? options.max : options.min,
-			options.reverse ? options.min : options.max,
-		);
+	options.setKey = setKey;
+	options.isByScore = isByScore;
 
-		if (!ids.length || options.doneIf(start, stop, ids)) {
-			return;
-		}
-		if (iteration > 1 && options.interval) {
-			await sleep(options.interval);
-		}
-		await process(ids);
+	while (await fetchAndProcessItems(getFn, process, start, stop, options, iteration)) {
 		iteration += 1;
 		start += utils.isNumber(options.alwaysStartAt) ? options.alwaysStartAt : options.batch;
 		stop = start + options.batch - 1;
