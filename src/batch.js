@@ -10,29 +10,7 @@ const DEFAULT_BATCH_SIZE = 100;
 
 const sleep = util.promisify(setTimeout);
 
-exports.processSortedSet = async function (setKey, process, options) {
-	options = options || {};
-
-	if (typeof process !== 'function') {
-		throw new Error('[[error:process-not-a-function]]');
-	}
-
-	// Progress bar handling (upgrade scripts)
-	if (options.progress) {
-		options.progress.total = await db.sortedSetCard(setKey);
-	}
-
-	options.batch = options.batch || DEFAULT_BATCH_SIZE;
-	options.reverse = options.reverse || false;
-
-	// use the fast path if possible
-	if (db.processSortedSet && typeof options.doneIf !== 'function' && !utils.isNumber(options.alwaysStartAt)) {
-		return await db.processSortedSet(setKey, process, options);
-	}
-
-	// custom done condition
-	options.doneIf = typeof options.doneIf === 'function' ? options.doneIf : function () {};
-
+async function processItems(setKey, process, options) {
 	let start = 0;
 	let stop = options.batch - 1;
 
@@ -67,6 +45,41 @@ exports.processSortedSet = async function (setKey, process, options) {
 		start += utils.isNumber(options.alwaysStartAt) ? options.alwaysStartAt : options.batch;
 		stop = start + options.batch - 1;
 	}
+}
+
+// Main function that uses the helper functions
+exports.processSortedSet = async function (setKey, process, options) {
+	options = options || {};
+
+	if (typeof process !== 'function') {
+		throw new Error('[[error:process-not-a-function]]');
+	}
+
+	// Progress bar handling (upgrade scripts)
+	if (options.progress) {
+		options.progress.total = await db.sortedSetCard(setKey);
+	}
+
+	options.batch = options.batch || DEFAULT_BATCH_SIZE;
+	options.reverse = options.reverse || false;
+
+	// use the fast path if possible
+	if (db.processSortedSet && typeof options.doneIf !== 'function' && !utils.isNumber(options.alwaysStartAt)) {
+		return await db.processSortedSet(setKey, process, options);
+	}
+
+	// custom done condition
+	options.doneIf = typeof options.doneIf === 'function' ? options.doneIf : function () {};
+
+	// use the fast path if possible
+	if (db.processSortedSet && typeof options.doneIf !== 'function' && !utils.isNumber(options.alwaysStartAt)) {
+		return await db.processSortedSet(setKey, process, options);
+	}
+
+	// custom done condition
+	options.doneIf = typeof options.doneIf === 'function' ? options.doneIf : function () {};
+
+	await processItems(setKey, process, options);
 };
 
 exports.processArray = async function (array, process, options) {
